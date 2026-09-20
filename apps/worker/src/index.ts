@@ -336,6 +336,17 @@ async function executeNode(
   }
 }
 
+async function isJobCancelled(jobId: number): Promise<boolean> {
+  const currentJob =
+    await db.orm.public.Job
+      .where({
+        id: jobId,
+      })
+      .first();
+
+  return currentJob?.status === 'CANCELLED';
+}
+
 const worker = new Worker(
   'workflow-execution',
   async (job) => {
@@ -361,6 +372,17 @@ const worker = new Worker(
 
 const attemptsMade = job.attemptsMade + 1;
 
+if (await isJobCancelled(jobId)) {
+  console.log(
+    `Database Job ${jobId} was cancelled before execution.`,
+  );
+
+  return {
+    cancelled: true,
+    jobId,
+  };
+}
+
 const currentJob =
   await db.orm.public.Job
     .where({
@@ -368,8 +390,25 @@ const currentJob =
     })
     .first();
 
+if (!currentJob) {
+  throw new Error(
+    `Database Job ${jobId} not found`,
+  );
+}
+
+if (currentJob.status === 'CANCELLED') {
+  console.log(
+    `Database Job ${jobId} was cancelled before execution.`,
+  );
+
+  return {
+    cancelled: true,
+    jobId,
+  };
+}
+
 const startedAt =
-  currentJob?.startedAt ??
+  currentJob.startedAt ??
   new Date().toISOString();
 
 await db.orm.public.Job
@@ -410,6 +449,17 @@ await db.orm.public.Job
       for (const rawNode of nodes) {
   const node = rawNode as WorkflowNode;
 
+  if (await isJobCancelled(jobId)) {
+    console.log(
+      `Database Job ${jobId} cancelled. Stopping workflow execution.`,
+    );
+
+    return {
+      cancelled: true,
+      jobId,
+    };
+  }
+
   console.log(
     `Executing node ${node.id}: ${node.name}`,
   );
@@ -435,6 +485,17 @@ await db.orm.public.Job
         results,
       };
 
+      if (await isJobCancelled(jobId)) {
+  console.log(
+    `Database Job ${jobId} was cancelled before completion.`,
+  );
+
+  return {
+    cancelled: true,
+    jobId,
+  };
+}
+
       await db.orm.public.Job
         .where({
           id: jobId,
@@ -452,60 +513,73 @@ await db.orm.public.Job
 
       return finalResult;
         } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Workflow execution failed';
+  const message =
+    error instanceof Error
+      ? error.message
+      : 'Workflow execution failed';
 
-      const maxAttempts =
-        job.opts.attempts ?? 1;
+  const cancelled = await isJobCancelled(jobId);
 
-      const isFinalAttempt =
-        job.attemptsMade + 1 >= maxAttempts;
+  if (cancelled) {
+    console.log(
+      `Database Job ${jobId} was cancelled. Ignoring execution failure.`,
+    );
 
-      if (!isFinalAttempt) {
-  console.log(
-    `Database Job ${jobId} entering RETRYING state. ` +
-    `Attempt ${attemptsMade}/${maxAttempts}`,
+    return {
+      cancelled: true,
+      jobId,
+    };
+  }
+
+  const maxAttempts =
+    job.opts.attempts ?? 1;
+
+  const isFinalAttempt =
+    job.attemptsMade + 1 >= maxAttempts;
+
+  if (!isFinalAttempt) {
+    console.log(
+      `Database Job ${jobId} entering RETRYING state. ` +
+      `Attempt ${attemptsMade}/${maxAttempts}`,
+    );
+  }
+
+  await db.orm.public.Job
+    .where({
+      id: jobId,
+    })
+    .update({
+      status: isFinalAttempt
+        ? 'FAILED'
+        : 'RETRYING',
+
+      attempts: attemptsMade,
+
+      error: message,
+
+      completedAt: isFinalAttempt
+        ? new Date().toISOString()
+        : null,
+    });
+
+  console.error(
+    `Database Job ${jobId} failed:`,
+    message,
   );
+
+  if (!isFinalAttempt) {
+    console.log(
+      `BullMQ will retry Database Job ${jobId}. ` +
+      `Attempt ${attemptsMade}/${maxAttempts}`,
+    );
+  } else {
+    console.log(
+      `Database Job ${jobId} exhausted all ${maxAttempts} attempts.`,
+    );
+  }
+
+  throw error;
 }
-
-      await db.orm.public.Job
-  .where({
-    id: jobId,
-  })
-  .update({
-  status: isFinalAttempt
-    ? 'FAILED'
-    : 'RETRYING',
-
-  attempts: attemptsMade,
-
-  error: message,
-
-  completedAt: isFinalAttempt
-    ? new Date().toISOString()
-    : null,
-});
-
-      console.error(
-        `Database Job ${jobId} failed:`,
-        message,
-      );
-
-      if (!isFinalAttempt) {
-        console.log(
-          `BullMQ will retry Database Job ${jobId}. ` +
-          `Attempt ${attemptsMade}/${maxAttempts}`,
-        );
-      } else {
-        console.log(
-          `Database Job ${jobId} exhausted all ${maxAttempts} attempts.`,
-        );
-      }
-
-      throw error;
-    }
   },
   {
     connection,

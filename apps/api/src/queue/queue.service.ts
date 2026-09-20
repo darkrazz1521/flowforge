@@ -18,27 +18,85 @@ export class QueueService implements OnModuleDestroy {
   );
 
   async addWorkflowJob(
-  jobId: number,
-  workflowId: number,
-  payload: unknown,
-) {
-  return this.queue.add(
-    'execute-workflow',
-    {
-      jobId,
-      workflowId,
-      payload,
-    },
-    {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 5000,
+    jobId: number,
+    workflowId: number,
+    payload: unknown,
+  ) {
+    return this.queue.add(
+      'execute-workflow',
+      {
+        jobId,
+        workflowId,
+        payload,
       },
-      removeOnComplete: false,
-      removeOnFail: false,
-    },
-  );
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+        removeOnComplete: false,
+        removeOnFail: false,
+      },
+    );
+  }
+
+  async cancelWorkflowJob(
+  jobId: number,
+): Promise<boolean> {
+  const jobs = await this.queue.getJobs([
+    'waiting',
+    'delayed',
+    'active',
+  ]);
+
+  for (const job of jobs) {
+    const data = job.data as {
+      jobId?: number;
+    };
+
+    if (data.jobId !== jobId) {
+      continue;
+    }
+
+    try {
+      const state = await job.getState();
+
+      console.log(
+        `Cancelling BullMQ Job ${job.id} for Database Job ${jobId}. State: ${state}`,
+      );
+
+      if (
+        state === 'waiting' ||
+        state === 'delayed'
+      ) {
+        await job.remove();
+
+        console.log(
+          `BullMQ Job ${job.id} removed.`,
+        );
+
+        return true;
+      }
+
+      if (state === 'active') {
+        console.log(
+          `BullMQ Job ${job.id} is currently active. Worker cancellation check will stop execution.`,
+        );
+
+        return false;
+      }
+    } catch (error) {
+      console.error(
+        `Failed to cancel BullMQ Job for Database Job ${jobId}:`,
+        error,
+      );
+
+      return false;
+    }
+  }
+
+  return false;
 }
 
   async onModuleDestroy() {

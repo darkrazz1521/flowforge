@@ -122,47 +122,49 @@ export class ExecutionService {
     return job;
   }
     async cancel(id: number): Promise<unknown> {
-    const job = await db.orm.public.Job
-      .where({
-        id,
-      })
-      .first();
+  const job = await db.orm.public.Job
+    .where({
+      id,
+    })
+    .first();
 
-    if (!job) {
-      throw new NotFoundException(
-        `Execution ${id} not found`,
-      );
-    }
-
-    if (
-      job.status === 'COMPLETED' ||
-      job.status === 'FAILED' ||
-      job.status === 'CANCELLED'
-    ) {
-      throw new BadRequestException(
-        `Execution ${id} cannot be cancelled because it is already ${job.status}`,
-      );
-    }
-
-    const result = await db.orm.public.Job
-      .where({
-        id,
-      })
-      .update({
-        status: 'CANCELLED',
-        completedAt: new Date().toISOString(),
-      });
-
-    if (!result) {
-      throw new NotFoundException(
-        `Execution ${id} not found`,
-      );
-    }
-
-    console.log(
-      `Execution ${id} cancelled`,
+  if (!job) {
+    throw new NotFoundException(
+      `Execution ${id} not found`,
     );
-
-    return result;
   }
+
+  if (
+    job.status === 'COMPLETED' ||
+    job.status === 'FAILED' ||
+    job.status === 'CANCELLED'
+  ) {
+    throw new BadRequestException(
+      `Execution ${id} cannot be cancelled because it is already ${job.status}`,
+    );
+  }
+
+  const result = await db.orm.public.Job
+    .where({
+      id,
+    })
+    .update({
+      status: 'CANCELLED',
+      completedAt: new Date().toISOString(),
+    });
+
+  if (!result) {
+    throw new NotFoundException(
+      `Execution ${id} not found`,
+    );
+  }
+
+  await this.queueService.cancelWorkflowJob(id);
+
+  console.log(
+    `Execution ${id} cancelled`,
+  );
+
+  return result;
+}
 }
