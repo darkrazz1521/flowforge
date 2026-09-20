@@ -74,6 +74,7 @@ async function executeTask(
 async function executeHttp(
   node: WorkflowNode,
   payload: JsonValue,
+  jobId?: number,
 ): Promise<JsonValue> {
   const config = getConfig(node.config);
 
@@ -92,61 +93,132 @@ async function executeHttp(
 
   const headers: Record<string, string> = {};
 
-if (
-  config.headers &&
-  typeof config.headers === 'object' &&
-  !Array.isArray(config.headers)
-) {
-  for (const [key, value] of Object.entries(
-    config.headers as Record<string, unknown>,
-  )) {
-    if (typeof value === 'string') {
-      headers[key] = value;
+  if (
+    config.headers &&
+    typeof config.headers === 'object' &&
+    !Array.isArray(config.headers)
+  ) {
+    for (const [key, value] of Object.entries(
+      config.headers as Record<string, unknown>,
+    )) {
+      if (typeof value === 'string') {
+        headers[key] = value;
+      }
     }
   }
-}
 
-const requestOptions: RequestInit = {
-  method,
-  headers,
-};
+  const requestOptions: RequestInit = {
+    method,
+    headers,
+  };
 
-if (method !== 'GET' && method !== 'DELETE') {
-  headers['Content-Type'] =
-    headers['Content-Type'] ?? 'application/json';
+  if (method !== 'GET' && method !== 'DELETE') {
+    headers['Content-Type'] =
+      headers['Content-Type'] ?? 'application/json';
 
-  requestOptions.body = JSON.stringify(
-    config.body ?? payload,
-  );
-}
-
-const response = await fetch(
-  url,
-  requestOptions,
-);
-
-  const contentType =
-    response.headers.get('content-type') ?? '';
-
-  const data: JsonValue =
-    contentType.includes('application/json')
-      ? ((await response.json()) as JsonValue)
-      : await response.text();
-
-  if (!response.ok) {
-    throw new Error(
-      `HTTP request failed with status ${response.status}`,
+    requestOptions.body = JSON.stringify(
+      config.body ?? payload,
     );
   }
 
-  return {
-    message: 'HTTP request executed successfully',
-    nodeId: node.id,
-    nodeName: node.name,
-    status: response.status,
-    statusText: response.statusText,
-    data,
-  };
+  const controller = new AbortController();
+
+  const cancellationCheck =
+    jobId !== undefined
+      ? (async () => {
+          while (!controller.signal.aborted) {
+            if (await isJobCancelled(jobId)) {
+              console.log(
+                `Database Job ${jobId} cancelled during HTTP node ${node.id}.`,
+              );
+
+              controller.abort();
+              return;
+            }
+
+            await new Promise<void>((resolve) => {
+              setTimeout(resolve, 250);
+            });
+          }
+        })()
+      : null;
+
+  requestOptions.signal = controller.signal;
+
+  try {
+    const response = await fetch(
+      url,
+      requestOptions,
+    );
+
+    if (cancellationCheck) {
+      controller.abort();
+      await cancellationCheck.catch(() => undefined);
+    }
+
+    if (jobId !== undefined && await isJobCancelled(jobId)) {
+      console.log(
+        `Database Job ${jobId} was cancelled after HTTP node ${node.id}.`,
+      );
+
+      return {
+        message: 'HTTP request cancelled',
+        nodeId: node.id,
+        nodeName: node.name,
+        cancelled: true,
+      };
+    }
+
+    const contentType =
+      response.headers.get('content-type') ?? '';
+
+    const data: JsonValue =
+      contentType.includes('application/json')
+        ? ((await response.json()) as JsonValue)
+        : await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP request failed with status ${response.status}`,
+      );
+    }
+
+    return {
+      message: 'HTTP request executed successfully',
+      nodeId: node.id,
+      nodeName: node.name,
+      status: response.status,
+      statusText: response.statusText,
+      data,
+    };
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === 'AbortError'
+    ) {
+      if (
+        jobId !== undefined &&
+        await isJobCancelled(jobId)
+      ) {
+        console.log(
+          `Database Job ${jobId} HTTP request aborted because the job was cancelled.`,
+        );
+
+        return {
+          message: 'HTTP request cancelled',
+          nodeId: node.id,
+          nodeName: node.name,
+          cancelled: true,
+        };
+      }
+    }
+
+    throw error;
+  } finally {
+    if (cancellationCheck) {
+      controller.abort();
+    }
+  }
 }
 
 async function executeDelay(
@@ -372,7 +444,7 @@ async function executeNode(
       return executeTask(node, payload);
 
     case 'HTTP':
-      return executeHttp(node, payload);
+      return executeHttp(node, payload, jobId);
 
     case 'DELAY':
       return executeDelay(node, payload, jobId);
@@ -572,7 +644,11 @@ await db.orm.public.Job
 
   const cancelled = await isJobCancelled(jobId);
 
-  if (cancelled) {
+  if (
+    cancelled ||
+    (error instanceof Error &&
+      error.name === 'AbortError')
+  ) {
     console.log(
       `Database Job ${jobId} was cancelled. Ignoring execution failure.`,
     );
