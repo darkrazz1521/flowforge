@@ -152,6 +152,7 @@ const response = await fetch(
 async function executeDelay(
   node: WorkflowNode,
   payload: JsonValue,
+  jobId?: number,
 ): Promise<JsonValue> {
   const config = getConfig(node.config);
 
@@ -168,9 +169,58 @@ async function executeDelay(
     );
   }
 
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, delay);
-  });
+  const checkInterval = 250;
+  let elapsed = 0;
+
+  while (elapsed < delay) {
+    if (
+      jobId !== undefined &&
+      await isJobCancelled(jobId)
+    ) {
+      console.log(
+        `Database Job ${jobId} cancelled during delay node ${node.id}.`,
+      );
+
+      return {
+        message: 'Delay cancelled',
+        nodeId: node.id,
+        nodeName: node.name,
+        delay,
+        input: payload,
+        cancelled: true,
+      };
+    }
+
+    const remaining = delay - elapsed;
+    const waitTime = Math.min(
+      checkInterval,
+      remaining,
+    );
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, waitTime);
+    });
+
+    elapsed += waitTime;
+  }
+
+  if (
+    jobId !== undefined &&
+    await isJobCancelled(jobId)
+  ) {
+    console.log(
+      `Database Job ${jobId} cancelled after delay node ${node.id}.`,
+    );
+
+    return {
+      message: 'Delay cancelled',
+      nodeId: node.id,
+      nodeName: node.name,
+      delay,
+      input: payload,
+      cancelled: true,
+    };
+  }
 
   return {
     message: 'Delay completed successfully',
@@ -315,6 +365,7 @@ function getNestedValue(
 async function executeNode(
   node: WorkflowNode,
   payload: JsonValue,
+  jobId?: number,
 ): Promise<JsonValue> {
   switch (node.type) {
     case 'TASK':
@@ -324,7 +375,7 @@ async function executeNode(
       return executeHttp(node, payload);
 
     case 'DELAY':
-      return executeDelay(node, payload);
+      return executeDelay(node, payload, jobId);
 
     case 'CONDITION':
       return executeCondition(node, payload);
@@ -468,6 +519,7 @@ await db.orm.public.Job
     await executeNode(
       node,
       currentPayload,
+       jobId,
     );
 
   results.push({
