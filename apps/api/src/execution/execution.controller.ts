@@ -31,4 +31,11 @@ export class ExecutionController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.executionService.findOne(id);
   }
+
+  @Post(':id/cancel')
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.executionService.cancel(id);
+  }
 }
