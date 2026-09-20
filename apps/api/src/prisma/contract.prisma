@@ -1,0 +1,85 @@
+// use prisma-8
+
+enum WorkflowStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  RETRYING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum NodeType {
+  TASK
+  HTTP
+  DELAY
+  CONDITION
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
+  username  String?
+  name      String?
+  workflows Workflow[]
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+}
+
+model Workflow {
+  id          Int            @id @default(autoincrement())
+  name        String
+  description String?
+  status      WorkflowStatus @default(ACTIVE)
+
+  owner       User           @relation(fields: [ownerId], references: [id])
+  ownerId     Int
+
+  nodes       WorkflowNode[]
+  jobs        Job[]
+
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+}
+
+model WorkflowNode {
+  id          Int        @id @default(autoincrement())
+  workflowId  Int
+  name        String
+  type        NodeType
+  config      Json?
+  position    Int
+
+  workflow    Workflow   @relation(fields: [workflowId], references: [id])
+
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([workflowId])
+}
+
+model Job {
+  id          Int        @id @default(autoincrement())
+  workflowId  Int
+  status      JobStatus  @default(PENDING)
+  attempts    Int        @default(0)
+  payload     Json?
+  result      Json?
+  error       String?
+
+  workflow    Workflow   @relation(fields: [workflowId], references: [id])
+
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+  startedAt   TimestamptzString?
+  completedAt TimestamptzString?
+
+  @@index([workflowId])
+  @@index([status])
+}
