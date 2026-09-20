@@ -72,6 +72,7 @@ model Job {
   payload     Json?
   result      Json?
   error       String?
+  queueJobId  String?
 
   workflow    Workflow   @relation(fields: [workflowId], references: [id])
 

@@ -138,6 +138,13 @@
                   "kind": "scalar"
                 }
               },
+              "queueJobId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "result": {
                 "nullable": true,
                 "type": {
@@ -217,6 +224,9 @@
                 },
                 "payload": {
                   "column": "payload"
+                },
+                "queueJobId": {
+                  "column": "queueJobId"
                 },
                 "result": {
                   "column": "result"
@@ -633,6 +643,11 @@
                   "nativeType": "json",
                   "nullable": true
                 },
+                "queueJobId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "result": {
                   "codecId": "pg/json@1",
                   "nativeType": "json",
@@ -1001,7 +1016,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e18cff637cc719c5c342ab7882adff5b9c0087657d7460e392deb226c451df4a"
+    "storageHash": "fcd9c694496b8fa3af424957a2febc9573eb4ee5ed7cc53abe0c8c6b162c6112"
   },
   "execution": {
     "executionHash": "52863cc0cbf5d5a9837a94c2eb95fc331c6569ebcdd9c6ac6452fa22f2afb112",

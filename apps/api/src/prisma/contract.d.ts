@@ -34,7 +34,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'e18cff637cc719c5c342ab7882adff5b9c0087657d7460e392deb226c451df4a'>;
+  StorageHashBase<'fcd9c694496b8fa3af424957a2febc9573eb4ee5ed7cc53abe0c8c6b162c6112'>;
 export type ExecutionHash =
   ExecutionHashBase<'52863cc0cbf5d5a9837a94c2eb95fc331c6569ebcdd9c6ac6452fa22f2afb112'>;
 export type ProfileHash =
@@ -250,6 +250,7 @@ export type FieldOutputTypes = {
       readonly payload: CodecTypes['pg/json@1']['output'] | null;
       readonly result: CodecTypes['pg/json@1']['output'] | null;
       readonly error: CodecTypes['pg/text@1']['output'] | null;
+      readonly queueJobId: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly startedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -294,6 +295,7 @@ export type FieldInputTypes = {
       readonly payload: CodecTypes['pg/json@1']['input'] | null;
       readonly result: CodecTypes['pg/json@1']['input'] | null;
       readonly error: CodecTypes['pg/text@1']['input'] | null;
+      readonly queueJobId: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly startedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -337,6 +339,7 @@ export type StorageColumnTypes = {
       readonly error: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly payload: CodecTypes['pg/json@1']['output'] | null;
+      readonly queueJobId: CodecTypes['pg/text@1']['output'] | null;
       readonly result: CodecTypes['pg/json@1']['output'] | null;
       readonly startedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly status: 'PENDING' | 'RUNNING' | 'RETRYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -381,6 +384,7 @@ export type StorageColumnInputTypes = {
       readonly error: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly payload: CodecTypes['pg/json@1']['input'] | null;
+      readonly queueJobId: CodecTypes['pg/text@1']['input'] | null;
       readonly result: CodecTypes['pg/json@1']['input'] | null;
       readonly startedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly status: 'PENDING' | 'RUNNING' | 'RETRYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -461,6 +465,7 @@ export namespace Models {
     payload: CodecTypes['pg/json@1']['output'] | null;
     result: CodecTypes['pg/json@1']['output'] | null;
     error: CodecTypes['pg/text@1']['output'] | null;
+    queueJobId: CodecTypes['pg/text@1']['output'] | null;
     createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
     updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     startedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -542,6 +547,11 @@ type ContractBase = Omit<
                   readonly nullable: true;
                 };
                 readonly error: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly queueJobId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
@@ -861,6 +871,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly queueJobId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -915,6 +929,7 @@ type ContractBase = Omit<
                 readonly payload: { readonly column: 'payload' };
                 readonly result: { readonly column: 'result' };
                 readonly error: { readonly column: 'error' };
+                readonly queueJobId: { readonly column: 'queueJobId' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
                 readonly startedAt: { readonly column: 'startedAt' };

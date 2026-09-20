@@ -42,61 +42,59 @@ export class QueueService implements OnModuleDestroy {
   }
 
   async cancelWorkflowJob(
-  jobId: number,
+  queueJobId: string,
 ): Promise<boolean> {
-  const jobs = await this.queue.getJobs([
-    'waiting',
-    'delayed',
-    'active',
-  ]);
+  const job = await this.queue.getJob(queueJobId);
 
-  for (const job of jobs) {
-    const data = job.data as {
-      jobId?: number;
-    };
+  if (!job) {
+    console.log(
+      `BullMQ Job ${queueJobId} not found.`,
+    );
 
-    if (data.jobId !== jobId) {
-      continue;
-    }
+    return false;
+  }
 
-    try {
-      const state = await job.getState();
+  try {
+    const state = await job.getState();
+
+    console.log(
+      `Cancelling BullMQ Job ${job.id}. State: ${state}`,
+    );
+
+    if (
+      state === 'waiting' ||
+      state === 'delayed'
+    ) {
+      await job.remove();
 
       console.log(
-        `Cancelling BullMQ Job ${job.id} for Database Job ${jobId}. State: ${state}`,
+        `BullMQ Job ${job.id} removed.`,
       );
 
-      if (
-        state === 'waiting' ||
-        state === 'delayed'
-      ) {
-        await job.remove();
+      return true;
+    }
 
-        console.log(
-          `BullMQ Job ${job.id} removed.`,
-        );
-
-        return true;
-      }
-
-      if (state === 'active') {
-        console.log(
-          `BullMQ Job ${job.id} is currently active. Worker cancellation check will stop execution.`,
-        );
-
-        return false;
-      }
-    } catch (error) {
-      console.error(
-        `Failed to cancel BullMQ Job for Database Job ${jobId}:`,
-        error,
+    if (state === 'active') {
+      console.log(
+        `BullMQ Job ${job.id} is currently active. Worker cancellation check will stop execution.`,
       );
 
       return false;
     }
-  }
 
-  return false;
+    console.log(
+      `BullMQ Job ${job.id} is in state ${state}.`,
+    );
+
+    return false;
+  } catch (error) {
+    console.error(
+      `Failed to cancel BullMQ Job ${queueJobId}:`,
+      error,
+    );
+
+    return false;
+  }
 }
 
   async onModuleDestroy() {

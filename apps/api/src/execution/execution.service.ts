@@ -69,6 +69,16 @@ export class ExecutionService {
           workflowId,
           payload ?? null,
         );
+      const updatedJob =
+  await db.orm.public.Job
+    .where({
+      id: job.id,
+    })
+    .update({
+      queueJobId: queueJob.id
+        ? String(queueJob.id)
+        : null,
+    });
 
       console.log(
         `Workflow ${workflowId} queued`,
@@ -82,7 +92,7 @@ export class ExecutionService {
         `BullMQ Job ID: ${queueJob.id}`,
       );
 
-      return job;
+      return updatedJob;
     } catch (error) {
       const message =
         error instanceof Error
@@ -159,7 +169,11 @@ export class ExecutionService {
     );
   }
 
-  await this.queueService.cancelWorkflowJob(id);
+  if (job.queueJobId) {
+  await this.queueService.cancelWorkflowJob(
+    job.queueJobId,
+  );
+}
 
   console.log(
     `Execution ${id} cancelled`,
